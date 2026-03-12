@@ -1,98 +1,71 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, FlatList, Alert } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
-
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Testing</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+interface PatrolLog {
+  id: string;
+  point: string;
+  time: string;
+  coords: string;
 }
 
+export default function SecurityPatrolScreen() {
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
+  const [scanned, setScanned] = useState(false);
+  const [logs, setLogs] = useState<PatrolLog[]>([]);
+
+// --- Ladataan tallennetut tiedot ja pyydetään luvat kameraan ja GPS ---
+  useEffect(() => {
+    (async () => {
+      // Kamera Oikeudet
+      if (!cameraPermission || !cameraPermission.granted) {
+        await requestCameraPermission();
+      }
+
+      // GPS oikeudet
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+
+      // Ladataan vanhemmat lokit
+      try {
+        const savedData = await AsyncStorage.getItem('patrol_history');
+        if (savedData !== null) {
+          setLogs(JSON.parse(savedData));
+        }
+      } catch (e) {
+        console.log("Virhe tietoja ladattaessa");
+      }
+    })();
+  }, []);
+
+
+
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: { flex: 1, backgroundColor: '#f0f0f0' },
+  header: { padding: 60, backgroundColor: '#0d1b2a', alignItems: 'center' },
+  headerTitle: { color: '#e0e1dd', fontSize: 22, fontWeight: 'bold', letterSpacing: 1 },
+  headerStatus: { color: '#4caf50', marginTop: 8, fontSize: 12 },
+  scannerContainer: { height: 280, backgroundColor: 'black' },
+  camera: { flex: 1 },
+  viewfinder: { 
+    flex: 1, borderStyle: 'solid', borderRadius: 10, 
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)', margin: 70 
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  logSection: { flex: 1, padding: 15 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1b263b', marginBottom: 15 },
+  logItem: { 
+    backgroundColor: 'white', padding: 12, borderRadius: 8, 
+    flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8,
+    borderLeftWidth: 4, borderLeftColor: '#007AFF', 
+    elevation: 3 
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  logPoint: { fontWeight: 'bold', fontSize: 15, color: '#1b263b' },
+  logCoords: { fontSize: 11, color: '#778da9', marginTop: 4 },
+  logTime: { color: '#007AFF', fontWeight: '600', fontSize: 12 },
+  emptyText: { textAlign: 'center', marginTop: 30, color: '#778da9' },
+  loadingText: { textAlign: 'center', marginTop: 100, fontSize: 16, color: '#1b263b' },
+  errorText: { textAlign: 'center', marginTop: 100, color: 'red', padding: 20 }
 });
