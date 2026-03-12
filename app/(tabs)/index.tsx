@@ -40,6 +40,40 @@ export default function SecurityPatrolScreen() {
       }
     })();
   }, []);
+// --- QR Koodin logiikka ---
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    setScanned(true); // Skanneri pauselle skannauksen ajaksi
+
+    try {
+      // Hae GPS Data puhelimelta
+      const location = await Location.getCurrentPositionAsync({});
+
+      // Luodaan uusi kohde-olio
+      const newEntry: PatrolLog = {
+        id: Date.now().toString(),
+        point: data,
+        time: new Date().toLocaleTimeString(),
+        coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`
+      };
+
+      // Päivitetään lista ja siirretään uusin loki ylös
+      const updatedLogs = [newEntry, ...logs];
+      setLogs(updatedLogs);
+
+      // Tallennetaan lista puhelimen muistiin 
+      await AsyncStorage.setItem('patrol_history', JSON.stringify(updatedLogs));
+
+      // Ilmoitus vartijalle onnistuneesta kirjauksesta
+      Alert.alert(
+        "Piste kirjattu", 
+        `Kohde: ${data}\nKellonaika: ${newEntry.time}`, 
+        [{ text: "Jatka kierrosta", onPress: () => setScanned(false) }]
+      );
+    } catch (error) {
+      Alert.alert("Virhe", "GPS-paikannus epäonnistui.");
+      setScanned(false);
+    }
+  };
 
 
 
