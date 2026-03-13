@@ -4,13 +4,15 @@ The app is supposed to be a light weight onpatrol tracker wich reads QR codes an
 wich can be later on looked at by the supervisor inspecting the patrols
 
 
-Working
--Qr Reader
--Basic UI
--Data List
--some dev buttons
+Working:
+Qr Reader
+Basic UI
+Data List
+some dev buttons
 
-In Progress
-- route comments
-- Better UI
-- Basic main menu
+-
+
+In Progress:
+route comments
+Better UI
+Basic main menu
