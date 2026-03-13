@@ -5,14 +5,13 @@ wich can be later on looked at by the supervisor inspecting the patrols
 
 
 Working:
-Qr Reader
-Basic UI
-Data List
-some dev buttons
+- Qr Reader
+- Basic UI
+- Data List
+- some dev buttons
 
--
 
 In Progress:
-route comments
-Better UI
-Basic main menu
+- route comments
+- Better UI
+- Basic main menu
