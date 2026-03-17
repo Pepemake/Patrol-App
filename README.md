@@ -6,9 +6,9 @@ wich can be later on looked at by the supervisor inspecting the patrols
 Main code in app/(tabs)/index.tsx
 
 This app uses:
--Camera
--GPS
--Local Storage (AsyncStorage)
+- Camera
+- GPS
+- Local Storage (AsyncStorage)
 
 Working:
 - Qr Reader
