@@ -1,523 +1,378 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, FlatList, Alert, Animated, PanResponder, Dimensions, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, Alert, TouchableOpacity, Modal, TextInput, ScrollView, Animated, PanResponder, Dimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
+// --- TYYPIT ---
 interface PatrolLog {
   id: string;
   point: string;
   time: string;
   coords: string;
+  report?: {
+    kategoria: string;
+    kohde: string;
+    toteama: string;
+    toimenpide: string;
+    lopputulos: string;
+    lisatiedot: string;
+  };
 }
 interface PatrolShift {
   id: string;
   startTime: string;
-  endTime?: string; 
   logs: PatrolLog[];
 }
 
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
 export default function SecurityPatrolScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
-  
-  // --- UUSI VUOROPOHJAINEN HALLINTA ---
   const [shifts, setShifts] = useState<PatrolShift[]>([]);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   
-  const listHeight = React.useRef(new Animated.Value(300)).current;
-  const lastScannedTime = useRef<number>(0);
-  const ajastin = 10000;
+  // Modalit
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isShiftPickerOpen, setShiftPickerOpen] = useState(false);
+  
+  // Raportointitiedot
+  const [currentScanData, setCurrentScanData] = useState('');
+  const [step, setStep] = useState(1);
+  const [report, setReport] = useState({
+    kategoria: '', kohde: '', toteama: '', toimenpide: '', lopputulos: '', lisatiedot: ''
+  });
 
-  // Haetaan aktiivinen vuoro datan näyttämistä varten
-  const activeShift = shifts.find(s => s.id === activeShiftId);
+  const cameraHeight = useRef(new Animated.Value(250)).current;
 
-  // --- VUORON ALOITUS ---
-  const startNewShift = async () => {
-    const now = new Date();
-    const timeString = now.toLocaleString('fi-FI', { 
-      weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
-    });
-
-    const newShift: PatrolShift = {
-      id: Date.now().toString(),
-      startTime: timeString,
-      logs: []
-    };
-
-    const updatedShifts = [newShift, ...shifts];
-    setShifts(updatedShifts);
-    setActiveShiftId(newShift.id);
-    
-    // Tallennetaan kaikki vuorot yhteen paikkaan
-    await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
-  };
-
-  // --- YKSITTÄISEN MERKINNÄN POISTO ---
-  const deleteLogItem = (logId: string) => {
-    if (!activeShiftId) return;
-
-    Alert.alert(
-      "Poistetaanko merkintä?",
-      "Haluatko varmasti poistaa tämän lokitapahtuman?",
-      [
-        { text: "Peruuta", style: "cancel" },
-        {
-          text: "Poista",
-          style: "destructive",
-          onPress: async () => {
-            const updatedShifts = shifts.map(shift => {
-              if (shift.id === activeShiftId) {
-                return { ...shift, logs: shift.logs.filter(l => l.id !== logId) };
-              }
-              return shift;
-            });
-            setShifts(updatedShifts);
-            await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
-          }
-        }
-      ]
-    );
-  };
-
-  // --- Historian tyhjennys ---
-  const clearAllShifts = () => {
-    Alert.alert(
-      "Tyhjennetäänkö kaikki?",
-      "Tämä poistaa kaikki vuorot ja niiden kirjaukset pysyvästi.",
-      [
-        { text: "Peruuta", style: "cancel" },
-        { 
-          text: "Tyhjennä", 
-          style: "destructive", 
-          onPress: async () => {
-            setShifts([]);
-            setActiveShiftId(null);
-            await AsyncStorage.removeItem('all_shifts');
-          } 
-        }
-      ]
-    );
-  };
-
-  // PanResponder-logiikka pysyy samana...
-  const panResponder = React.useRef(
+  const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gestureState) => {
-        const newHeight = 300 - gestureState.dy;
-        if (newHeight > 150 && newHeight < 600) {
-          listHeight.setValue(newHeight);
+      onPanResponderMove: (evt, gestureState) => {
+        const newHeight = gestureState.moveY - 60;
+        if (newHeight > 100 && newHeight < SCREEN_HEIGHT - 150) {
+          cameraHeight.setValue(newHeight);
         }
       },
-      onPanResponderRelease: () => {},
+      onPanResponderRelease: () => {
+      }
     })
   ).current;
+  const clearAllShifts = async () => {
+    Alert.alert("Tyhjennys", "Haluatko varmasti poistaa kaiken historian?", [
+      { text: "Peruuta", style: "cancel" },
+      { text: "Poista", style: "destructive", onPress: async () => {
+          setShifts([]); 
+          setActiveShiftId(null); 
+          await AsyncStorage.removeItem('all_shifts');
+      }}
+    ]);
+  };
 
-// --- Ladataan tallennetut tiedot ja pyydetään luvat kameraan ja GPS ---
+  const activeShift = shifts.find(s => s.id === activeShiftId);
+
+  const inspectionData = {
+    categories: [
+      { id: "palo", title: "Paloturvallisuus", options: ["Palo-ovi", "Hätäuloskäynti", "Alkusammutuskalusto"] },
+      { id: "lukitukset", title: "Lukitukset", options: ["Ulko-ovi", "Sisäovi", "Porrasovi", "Ikkuna"] },
+      { id: "kiinteisto", title: "Kiinteistö", options: ["Lämpö", "Vesi", "Ilmastointi", "Sähkö"] },
+      { id: "henkilot", title: "Henkilöt", options: ["Luvallinen", "Luvaton", "Rikos", "Viranomainen"] }
+    ],
+    states: ["Avoin", "Rikki", "Puutteita", "Päällä", "Pois päältä"],
+    actions: ["Tarkastettu", "Suljettu", "Poistettu", "Sammutettu", "Soitettu 112"],
+    results: ["OK", "Ei ok"]
+  };
+
   useEffect(() => {
     (async () => {
-      // Pyydetään Kamera oikeude.
-      if (!cameraPermission || !cameraPermission.granted) {
-        await requestCameraPermission();
-      }
-      // Pyydetään GPS-oikeudet
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status === 'granted');
-
-      // Ladataan tallennettu data
-      try {
-        const savedData = await AsyncStorage.getItem('all_shifts');
-        
-        if (savedData !== null) {
-          const parsedShifts = JSON.parse(savedData);
-          setShifts(parsedShifts);
-          if (parsedShifts.length > 0) {
-            setActiveShiftId(parsedShifts[0].id);
-          }
-        }
-      } catch (e) {
-        console.log("Virhe tietoja ladattaessa:", e);
+      if (!cameraPermission?.granted) await requestCameraPermission();
+      await Location.requestForegroundPermissionsAsync();
+      const savedData = await AsyncStorage.getItem('all_shifts');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        setShifts(parsed);
+        if (parsed.length > 0) setActiveShiftId(parsed[0].id);
       }
     })();
   }, []);
-// --- QR Koodin logiikka ---
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    const now = Date.now();
+
+  const startNewShift = async () => {
+    const now = new Date();
+    const timeString = now.toLocaleString('fi-FI', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const newShift: PatrolShift = { id: Date.now().toString(), startTime: timeString, logs: [] };
+    const updatedShifts = [newShift, ...shifts];
+    setShifts(updatedShifts);
+    setActiveShiftId(newShift.id);
+    await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
+  };
+
+  const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (!activeShiftId) {
-    setScanned(true); 
-    Alert.alert(
-      "Vuoro puuttuu", 
-      "Aloita ensin uusi vuoro yläreunan painikkeesta.",
-      [{ text: "Selvä", onPress: () => setScanned(false) }] 
-    );
-    return;
-  }
-    if (!activeShiftId) {
-      Alert.alert("Huomio", "Valitse tai aloita vuoro ennen skannausta.");
+      setScanned(true);
+      Alert.alert("Huomio", "Aloita ensin uusi kierros.", [{ text: "OK", onPress: () => setScanned(false) }]);
       return;
     }
-
-    lastScannedTime.current = now; 
     setScanned(true);
+    setCurrentScanData(data);
+    setStep(1);
+    setReport({ kategoria: '', kohde: '', toteama: '', toimenpide: '', lopputulos: '', lisatiedot: '' });
+    setModalVisible(true);
+  };
 
+  const saveFinalReport = async () => {
     try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
+      const location = await Location.getCurrentPositionAsync({});
       const newEntry: PatrolLog = {
         id: Date.now().toString(),
-        point: data,
-        time: new Date().toLocaleTimeString('fi-FI'),
-        coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`
+        point: currentScanData,
+        time: new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }),
+        coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`,
+        report: { ...report }
       };
-
-      const updatedShifts = shifts.map(shift => {
-        if (shift.id === activeShiftId) {
-          return { ...shift, logs: [newEntry, ...shift.logs] };
-        }
-        return shift;
-      });
-
+      const updatedShifts = shifts.map(s => s.id === activeShiftId ? { ...s, logs: [newEntry, ...s.logs] } : s);
       setShifts(updatedShifts);
       await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
-
-      Alert.alert(
-        "Piste kirjattu", 
-        `Kohde: ${data}`, 
-        [{ text: "OK", onPress: () => setScanned(false) }]
-      );
-    } catch (error) {
-      Alert.alert("Virhe", "Sijainti epäonnistui.");
+      setModalVisible(false);
+      setScanned(false);
+    } catch (err) {
       setScanned(false);
     }
   };
- // --- LUPAOIKEUDET JA LATAUSRUUDUT ---
-  if (!cameraPermission || locationPermission === null) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Käynnistetään järjestelmää...</Text>
-      </View>
-    );
-  }
-  if (locationPermission === false || !cameraPermission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>
-          Pääsy estetty. Salli kamera ja GPS-paikannus puhelimen asetuksista jatkaaksesi.
-        </Text>
-      </View>
-    );
-  }
-{/* --- KÄYTTÖLIITTYMÄ ---*/}
-return (
-  <View style={styles.container}>
-    {/* Yläpalkki */}
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Aluevalvonnan Seuranta</Text>
-      <Text style={styles.headerStatus}>
-        GPS: {locationPermission ? 'KÄYTÖSSÄ' : 'EI KÄYTÖSSÄ'}
-      </Text>
-    </View>
 
-    {/* Skanneri - Täyttää taustan */}
-    <View style={{ flex: 1, backgroundColor: 'black' }}>
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-      >
-        <View style={styles.viewfinder} />
-      </CameraView>
-    </View>
+  const deleteLogItem = (logId: string) => {
+    const updated = shifts.map(s => s.id === activeShiftId ? { ...s, logs: s.logs.filter(l => l.id !== logId) } : s);
+    setShifts(updated);
+    AsyncStorage.setItem('all_shifts', JSON.stringify(updated));
+  };
 
-{/* "Slideri" eli vetopalkki ja lokilista */}
-<Animated.View style={[styles.logSection, { height: listHeight }]}>
-      {/* 1. VETOKAHVA (Slider) */}
-      <View {...panResponder.panHandlers} style={styles.dragHandle}>
-        <View style={styles.handleBar} />
-      </View>
-
-      {/* 2. OTSIKKO JA UUSI VUORO -NAPPI */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <Text style={styles.sectionTitle}>
-          {activeShift ? `Kierros: ${activeShift.startTime}` : "Ei aloitettua kierrosta"}
-        </Text>
+  const renderOptions = (items: string[], field: string, nextStep: number) => (
+    <View style={styles.optionGrid}>
+      {items.map(item => (
         <TouchableOpacity 
-          style={styles.newShiftButton} 
-          onPress={startNewShift}
-          activeOpacity={0.7}
+          key={item} 
+          style={styles.optionButton} 
+          onPress={() => { setReport({...report, [field]: item}); setStep(nextStep); }}
         >
-          <Text style={styles.newShiftButtonText}>+ UUSI</Text>
+          <Text style={styles.optionText}>{item}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Aluevalvonnan Seuranta</Text>
+      </View>
+      <Animated.View style={{ height: cameraHeight }}>
+        <CameraView 
+          style={StyleSheet.absoluteFillObject} 
+          onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        >
+          <View style={styles.viewfinder} />
+        </CameraView>
+      </Animated.View>
+      <View style={styles.logSection}>
+  <FlatList
+    data={activeShift ? activeShift.logs : []}
+    keyExtractor={item => item.id}
+    ListHeaderComponent={
+      <>
+        <View style={styles.dragHandle} {...panResponder.panHandlers}>
+          <View style={styles.handleBar} />
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
+          <TouchableOpacity style={styles.newShiftButton} onPress={startNewShift}>
+            <Text style={styles.newShiftButtonText}>+ UUSI</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.activeShiftBox} onPress={() => setShiftPickerOpen(true)}>
+          <View>
+            <Text style={styles.label}>VALITTU KIERROS:</Text>
+            <Text style={styles.activeShiftText}>{activeShift ? `📅 ${activeShift.startTime}` : "Valitse kierros"}</Text>
+          </View>
+          <Text style={{color: '#007AFF', fontWeight: 'bold'}}>MUUTA ▲</Text>
+        </TouchableOpacity>
+        <Text style={styles.listTitle}>Raportit:</Text>
+      </>
+    }
+    renderItem={({ item }) => (
+      <View style={styles.logItem}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.logPoint}>{item.point} - {item.report?.kohde}</Text>
+          <Text style={styles.logCoords}>
+            {item.report?.toteama} {"->"} {item.report?.toimenpide}
+          </Text>
+          <Text style={styles.logTime}>{item.time} | {item.report?.lopputulos}</Text>
+        </View>
+        <TouchableOpacity onPress={() => deleteLogItem(item.id)} style={styles.deleteButton}>
+          <Text style={{color: 'red'}}>✕</Text>
         </TouchableOpacity>
       </View>
-     {/* 3. VUORON VALINTAMENU (Vaakasuuntainen lista) */}
-      <View style={{ marginBottom: 15, height: 45 }}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={shifts}
-          keyExtractor={(item) => item.id}
-          // --- OPTIMOINTI ---
-          initialNumToRender={7}
-          removeClippedSubviews={true}
-          // ------------------
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-              style={[
-                styles.shiftTab, 
-                activeShiftId === item.id && styles.activeShiftTab
-              ]} 
-              onPress={() => setActiveShiftId(item.id)}
-              activeOpacity={0.8}
-            >
-              <Text style={[
-                styles.shiftTabText, 
-                activeShiftId === item.id && styles.activeShiftTabText
-              ]}>
-                {item.startTime}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
-      {/* 4. LOKILISTA (Valitun vuoron tapahtumat) */}
-      <FlatList
-        data={activeShift ? activeShift.logs : []}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 20 }} 
-        initialNumToRender={10}    
-        windowSize={5}             
-        maxToRenderPerBatch={5}    
-        removeClippedSubviews={true}
-        renderItem={({ item }) => (
-          <View style={styles.logItem}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.logPoint}>{item.point}</Text>
-              <Text style={styles.logCoords}>Koordinaatit: {item.coords}</Text>
-              <Text style={styles.logTime}>{item.time}</Text>
-            </View>
-            <TouchableOpacity 
-              onPress={() => deleteLogItem(item.id)}
-              style={styles.deleteItemButton}
-              activeOpacity={0.6}
-            >
-              <Text style={styles.deleteItemText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={{ marginTop: 20, alignItems: 'center' }}>
-            <Text style={styles.emptyText}>
-              {activeShiftId ? "Ei tallennettuja pisteitä tällä vuorolla." : "Aloita uusi vuoro skannataksesi."}
-            </Text>
-          </View>
-        }
-      />
-      {/* 5. TYHJENNÄ HISTORIA -NAPPI */}
-      <TouchableOpacity 
-        style={styles.devtyhjenna} 
-        onPress={clearAllShifts}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.devButtonText}>TYHJENNÄ KAIKKI HISTORIA</Text>
-      </TouchableOpacity>
-    </Animated.View>
-    </View>
-    ); 
+    )}
+    ListFooterComponent={
+      shifts.length > 0 ? (
+        <View style={{ paddingBottom: 60 }}>
+          <TouchableOpacity style={styles.devtyhjenna} onPress={clearAllShifts}>
+            <Text style={styles.devButtonText}>TYHJENNÄ HISTORIA</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null
     }
+    contentContainerStyle={{ paddingBottom: 50 }}
+  />
+</View>
+      <Modal visible={isShiftPickerOpen} animationType="slide">
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Valitse kierros</Text>
+          <FlatList
+            data={shifts}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.dropdownItem} 
+                onPress={() => { setActiveShiftId(item.id); setShiftPickerOpen(false); }}
+              >
+                <Text>{item.startTime}</Text>
+              </TouchableOpacity>
+            )}
+          />
+          <TouchableOpacity onPress={() => setShiftPickerOpen(false)} style={styles.closeButton}><Text style={{color:'white'}}>Sulje</Text></TouchableOpacity>
+        </View>
+      </Modal>
 
+      <Modal 
+  visible={modalVisible} 
+  animationType="slide"
+  onRequestClose={() => { setModalVisible(false); setScanned(false); setStep(1); }}
+>
+  <View style={styles.modalContainer}>
+    <ScrollView>
+      <Text style={styles.modalTitle}>Skanattu: {currentScanData}</Text>
+      
+      {/* VAIHE 1: Kategoria */}
+      {step === 1 && inspectionData.categories.map(cat => (
+        <TouchableOpacity 
+          key={cat.id} 
+          style={styles.optionButton} 
+          onPress={() => { setReport({...report, kategoria: cat.title}); setStep(2); }}
+        >
+          <Text style={styles.optionText}>{cat.title}</Text>
+        </TouchableOpacity>
+      ))}
+
+      {/* VAIHE 2: Kohde (Suodattaa vaihtoehdot valitun kategorian mukaan) */}
+      {step === 2 && (
+        <View>
+          <Text style={styles.stepTitle}>2. Kohde ({report.kategoria})</Text>
+          {renderOptions(
+            inspectionData.categories.find(c => c.title === report.kategoria)?.options || [], 
+            'kohde', 
+            3
+          )}
+        </View>
+      )}
+
+      {/* VAIHE 3: Toteama (Avoin, Rikki, jne.) */}
+      {step === 3 && (
+        <View>
+          <Text style={styles.stepTitle}>3. Toteama</Text>
+          {renderOptions(inspectionData.states, 'toteama', 4)}
+        </View>
+      )}
+
+      {/* VAIHE 4: Toimenpide (Tarkastettu, Suljettu, jne.) */}
+      {step === 4 && (
+        <View>
+          <Text style={styles.stepTitle}>4. Toimenpide</Text>
+          {renderOptions(inspectionData.actions, 'toimenpide', 5)}
+        </View>
+      )}
+
+      {/* VAIHE 5: Lopputulos (OK, Ei ok) */}
+      {step === 5 && (
+        <View>
+          <Text style={styles.stepTitle}>5. Lopputulos</Text>
+          {renderOptions(inspectionData.results, 'lopputulos', 6)}
+        </View>
+      )}
+
+      {/* VAIHE 6: Lisätiedot ja tallennus */}
+      {step === 6 && (
+        <View>
+          <Text style={styles.stepTitle}>6. Lisätiedot</Text>
+          <TextInput 
+            style={styles.modalInput} 
+            multiline 
+            placeholder="Vapaa teksti..." 
+            onChangeText={t => setReport({...report, lisatiedot: t})} 
+          />
+          <TouchableOpacity style={styles.saveButton} onPress={saveFinalReport}>
+            <Text style={{color:'white', textAlign:'center', fontWeight:'bold'}}>TALLENNA RAPORTTI</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+    {/* PERUUTUS / TAKAISIN -NAPPI */}
+    <TouchableOpacity 
+      onPress={() => {
+        if (step > 1) {
+          setStep(step - 1);
+        } else {
+          setModalVisible(false);
+          setScanned(false);
+          setStep(1);
+        }
+      }} 
+      style={styles.modalCancel}
+    >
+      <Text style={{color: 'red', fontWeight: 'bold'}}>
+        {step > 1 ? "← Takaisin" : "Peruuta"}
+      </Text>
+    </TouchableOpacity>
+  </View>
+</Modal>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  // Pääkontti
-  container: { 
-    flex: 1, 
-    backgroundColor: '#f0f0f0' 
-  },
-
-  // Yläpalkki ja otsikot 
-  header: { 
-    width: '100%',
-    paddingTop: 60,
-    paddingBottom: 20, 
-    paddingHorizontal: 25, 
-    backgroundColor: '#0d1b2a', 
-    alignItems: 'flex-start', 
-    justifyContent: 'center',
-  },
-  headerTitle: { 
-    color: '#e0e1dd', 
-    fontSize: 24,         
-    fontWeight: 'bold', 
-    letterSpacing: 1,
-    textAlign: 'left',   
-    width: '100%',
-  },
-  headerStatus: { 
-    color: '#4caf50', 
-    marginTop: 5, 
-    fontSize: 14, 
-    fontWeight: '600',
-    textAlign: 'left', 
-  },
-
-  // Kamera 
-  cameraContainer: { 
-    flex: 1, 
-    backgroundColor: 'black' 
-  },
-  camera: { 
-    flex: 1 
-  },
-  viewfinder: { 
-    flex: 1, 
-    borderStyle: 'solid', 
-    borderRadius: 10, 
-    borderWidth: 2, 
-    borderColor: 'rgba(255,255,255,0.5)', 
-    margin: 70 
-  },
-
-  // Vedettävän listan kahva (Drag Handle)
-  dragHandle: {
-    width: '100%',
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'white',
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    shadowColor: "#0818ff",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: '#213bcf',
-    borderRadius: 3,
-  },
-
-  // Historia
-  logSection: { 
-    backgroundColor: 'white',
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: '#1b263b', 
-    marginBottom: 15,
-    marginTop: 5 
-  },
-  logItem: { 
-    backgroundColor: 'white', 
-    padding: 12, 
-    borderRadius: 8, 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 8,
-    borderLeftWidth: 4, 
-    borderLeftColor: '#007AFF', 
-    elevation: 2 
-  },
-  logPoint: { 
-    fontWeight: 'bold', 
-    fontSize: 15, 
-    color: '#1b263b' 
-  },
-  logCoords: { 
-    fontSize: 11, 
-    color: '#778da9', 
-    marginTop: 4 
-  },
-  logTime: { 
-    color: '#007AFF', 
-    fontWeight: '600', 
-    fontSize: 12 
-  },
-
-  // Ilmoitustekstit
-  emptyText: { textAlign: 'center', marginTop: 30, color: '#778da9' },
-  loadingText: { textAlign: 'center', marginTop: 100, fontSize: 16, color: '#1b263b' },
-  errorText: { textAlign: 'center', marginTop: 100, color: 'red', padding: 20 },
-
-  devtyhjenna: {
-    alignSelf: 'center',
-    backgroundColor: '#e63946', 
-    paddingVertical: 10,  
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    marginTop: 10,      
-    marginBottom: 1,   
-    elevation: 5,       
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    zIndex: 10, 
-  },
-  devButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  deleteItemButton: {
-    backgroundColor: '#f1f1f1',
-    width: 35,
-    height: 35,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  deleteItemText: {
-    color: '#e63946',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-shiftTab: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    height: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeShiftTab: {
-    backgroundColor: '#007AFF', 
-    borderColor: '#007AFF',
-  },
-  shiftTabText: {
-    color: '#555',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  activeShiftTabText: {
-    color: 'white', 
-    fontWeight: 'bold',
-  },
-  newShiftButton: {
-    backgroundColor: '#0011ff', 
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  newShiftButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
+  container: { flex: 1, backgroundColor: '#1a1a1a' },
+  header: { paddingTop: 50, paddingBottom: 15, alignItems: 'center' },
+  headerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  viewfinder: { flex: 1, borderStyle: 'solid', borderRadius: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', margin: 40 },
+  logSection: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 25, borderTopRightRadius: 25, marginTop: -20 },
+  dragHandle: { width: '100%', height: 40, alignItems: 'center', justifyContent: 'center' },
+  handleBar: { width: 45, height: 6, backgroundColor: '#ddd', borderRadius: 3 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold' },
+  newShiftButton: { backgroundColor: '#007AFF', padding: 8, borderRadius: 5 },
+  newShiftButtonText: { color: 'white', fontWeight: 'bold' },
+  activeShiftBox: { backgroundColor: '#f8f9fa', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#007AFF', marginHorizontal: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  label: { fontSize: 10, color: '#007AFF', fontWeight: 'bold' },
+  activeShiftText: { fontSize: 14, fontWeight: 'bold' },
+  listTitle: { marginTop: 15, paddingHorizontal: 15, fontSize: 14, fontWeight: 'bold', color: '#555' },
+  logItem: { backgroundColor: 'white', padding: 12, borderRadius: 8, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', elevation: 2, borderLeftWidth: 4, borderLeftColor: '#007AFF' },
+  logPoint: { fontWeight: 'bold' },
+  logCoords: { fontSize: 12, color: '#666' },
+  logTime: { fontSize: 11, color: '#007AFF', fontWeight: 'bold' },
+  stepTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: '#007AFF',marginTop: 10 },
+  deleteButton: { padding: 5 },
+  modalContainer: { flex: 1, padding: 25, paddingTop: 60, backgroundColor: 'white' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+  optionGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  optionButton: { width: '48%', backgroundColor: '#f0f0f0', padding: 15, borderRadius: 10, marginBottom: 10 },
+  optionText: { textAlign: 'center' },
+  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, height: 100 },
+  saveButton: { backgroundColor: '#2ecc71', padding: 15, borderRadius: 10, marginTop: 20 },
+  closeButton: { backgroundColor: '#666', padding: 15, borderRadius: 10, marginTop: 10, alignItems: 'center' },
+  dropdownItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  modalCancel: { marginTop: 20, alignSelf: 'center' },
+  devtyhjenna: { marginTop: 20, marginHorizontal: 15,padding: 15, borderRadius: 10, backgroundColor: '#fff0f0', borderWidth: 1, borderColor: '#ffcccc',alignItems: 'center' },
+  devButtonText: { color: '#cc0000', fontWeight: 'bold', fontSize: 12 },
 });
