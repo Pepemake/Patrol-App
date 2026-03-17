@@ -1,31 +1,31 @@
-Patrol App is a commission project wich aims to help the daily life of Security students during their studies
+Aluevalvonta sovellus on Ammatikoulun turvalan opiskelijoille suunniteltu sovellus jolla voidaan suorittaa yksinkertaista aluevalvontaa.
 
-The app is supposed to be a light weight onpatrol tracker wich reads QR codes and saves location data on the phone
-wich can be later on looked at by the supervisor inspecting the patrols
+Ohjelma löytyy: app/(tabs)/index.tsx
 
-Main code in app/(tabs)/index.tsx
-
-This app uses:
+Vaaditut oikeudet:
 - Camera
 - GPS
 - Local Storage (AsyncStorage)
 
-Working:
-- Qr Reader
-- Basic UI
-- Data List
-- some dev buttons
+Valmiina:
+- UI: Kameran ja Raportti ikkunan kokoa voi säätä sliderilla
+- Kamera lukee QR koodit, tunnistus lukittuu skannauksen jälkeen ja vapautuu tallennettaessa.
+- Kierrosten hallinta (Uusi kierros, kierroksen valinta pudotusvalikosta).
+- Skannatut raportit näkyvät listassa aikaleimoineen ja tiivistelmineen.
+- Devi näppäin: Historia tyhjennyspainike ja poistonapit yksittäisille riveille.
+- Monivaiheinen raportointi: 6-vaiheinen kyselyjärjestelmä koodin sisällä.
+- GPS Integraatio: Koordinaattien haku ja tallennus jokaisen raportin yhteyteen.
 
+Työn alla: 
+- Yksittäisen raportin avaaminen listasta niin, että kaikki tiedot (myös ne GPS-koordinaatit ja lisätiedot) näkyvät isona. 
 
-In Progress:
-- route comments
-- Better UI
-- Basic main menu
+Bugit:
+- Tällä hetkellä riippumatta käyttäjän valinnasta kaikki vaiheet ovat näkyvissä kun tehdään raporttia.
 
-Required to run the app server:
+Vaaditut:
 Node.js
 
-To run, Powershell:
+Powershell komennot:
 - -npm install -g expo-cli
 - -npm install
 - -npx expo start
