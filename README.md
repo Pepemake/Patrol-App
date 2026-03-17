@@ -1,4 +1,4 @@
-Aluevalvonta sovellus on Ammatikoulun turvalan opiskelijoille suunniteltu sovellus jolla voidaan suorittaa yksinkertaista aluevalvontaa.
+Aluevalvonta sovellus on Ammattikoulun turva-alan opiskelijoille suunniteltu sovellus jolla voidaan suorittaa yksinkertaista aluevalvontaa.
 
 Ohjelma löytyy: app/(tabs)/index.tsx
 
