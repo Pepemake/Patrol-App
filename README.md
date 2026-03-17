@@ -26,6 +26,6 @@ Required to run the app server:
 Node.js
 
 To run, Powershell:
-npm install -g expo-cli
-npm install
-npx expo start
+- -npm install -g expo-cli
+- -npm install
+- -npx expo start
