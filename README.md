@@ -3,6 +3,8 @@ Patrol App is a commission project wich aims to help the daily life of Security 
 The app is supposed to be a light weight onpatrol tracker wich reads QR codes and saves location data on the phone
 wich can be later on looked at by the supervisor inspecting the patrols
 
+Main code in app/(tabs)/index.tsx
+
 
 Working:
 - Qr Reader
