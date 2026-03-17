@@ -21,3 +21,11 @@ In Progress:
 - route comments
 - Better UI
 - Basic main menu
+
+Required to run the app server:
+Node.js
+
+To run, Powershell:
+npm install -g expo-cli
+npm install
+npx expo start
