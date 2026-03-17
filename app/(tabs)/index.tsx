@@ -187,14 +187,14 @@ export default function SecurityPatrolScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
           <TouchableOpacity style={styles.newShiftButton} onPress={startNewShift}>
-            <Text style={styles.newShiftButtonText}>+ UUSI</Text>
+            <Text style={styles.newShiftButtonText}>+ Uusi kierros</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.activeShiftBox} onPress={() => setShiftPickerOpen(true)}>
           <View>
             <Text style={styles.label}>VALITTU KIERROS:</Text>
-            <Text style={styles.activeShiftText}>{activeShift ? `📅 ${activeShift.startTime}` : "Valitse kierros"}</Text>
+            <Text style={styles.activeShiftText}>{activeShift ? ` ${activeShift.startTime}` : "Valitse kierros"}</Text>
           </View>
           <Text style={{color: '#007AFF', fontWeight: 'bold'}}>MUUTA ▲</Text>
         </TouchableOpacity>
