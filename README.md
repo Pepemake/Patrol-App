@@ -17,7 +17,9 @@ Valmiina:
 - GPS Integraatio: Koordinaattien haku ja tallennus jokaisen raportin yhteyteen.
 
 Työn alla: 
-- Yksittäisen raportin avaaminen listasta niin, että kaikki tiedot (myös ne GPS-koordinaatit ja lisätiedot) näkyvät isona. 
+- Yksittäisen raportin avaaminen listasta niin, että kaikki tiedot (myös ne GPS-koordinaatit ja lisätiedot) näkyvät isona.
+- Loppu raportti PDF Muotoon jossa käyttäjän nimi + käydyt paikat
+- Sähköposti lähettäjä halutulle tarkastajalle
 
 Bugit:
 - Tällä hetkellä riippumatta käyttäjän valinnasta kaikki vaiheet ovat näkyvissä kun tehdään raporttia.
