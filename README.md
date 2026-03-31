@@ -6,6 +6,7 @@ Vaaditut oikeudet:
 - Camera
 - GPS
 - Local Storage (AsyncStorage)
+- Puhelimeen kirjattu sähköposti
 
 Valmiina:
 - UI: Kameran ja Raportti ikkunan kokoa voi säätä sliderilla
@@ -15,14 +16,18 @@ Valmiina:
 - Devi näppäin: Historia tyhjennyspainike ja poistonapit yksittäisille riveille.
 - Monivaiheinen raportointi: 6-vaiheinen kyselyjärjestelmä koodin sisällä.
 - GPS Integraatio: Koordinaattien haku ja tallennus jokaisen raportin yhteyteen.
-
-Työn alla: 
 - Yksittäisen raportin avaaminen listasta niin, että kaikki tiedot (myös ne GPS-koordinaatit ja lisätiedot) näkyvät isona.
 - Loppu raportti PDF Muotoon jossa käyttäjän nimi + käydyt paikat
 - Sähköposti lähettäjä halutulle tarkastajalle
 
+Työn alla: 
+- Parempi UI
+- Vartijan nimi kierrokseen
+- Lukitus systeemi
+  
+
 Bugit:
-- Tällä hetkellä riippumatta käyttäjän valinnasta kaikki vaiheet ovat näkyvissä kun tehdään raporttia.
+- Ei havaintoja
 
 Vaaditut:
 Node.js
