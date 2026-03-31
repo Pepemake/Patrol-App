@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, FlatList, Alert, TouchableOpacity, Modal, TextInput, ScrollView, Animated, PanResponder, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, FlatList, Modal, PanResponder, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // --- TYYPIT ---
 interface PatrolLog {
@@ -23,6 +23,7 @@ interface PatrolShift {
   id: string;
   startTime: string;
   logs: PatrolLog[];
+  status?: 'AKTIIVINEN' | 'LUKITTU';
 }
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -45,7 +46,6 @@ export default function SecurityPatrolScreen() {
   });
 
   const cameraHeight = useRef(new Animated.Value(250)).current;
-
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -71,7 +71,6 @@ export default function SecurityPatrolScreen() {
   };
 
   const activeShift = shifts.find(s => s.id === activeShiftId);
-
   const inspectionData = {
     categories: [
       { id: "palo", title: "Paloturvallisuus", options: ["Palo-ovi", "Hätäuloskäynti", "Alkusammutuskalusto"] },
@@ -97,15 +96,25 @@ export default function SecurityPatrolScreen() {
     })();
   }, []);
 
-  const startNewShift = async () => {
-    const now = new Date();
-    const timeString = now.toLocaleString('fi-FI', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const newShift: PatrolShift = { id: Date.now().toString(), startTime: timeString, logs: [] };
-    const updatedShifts = [newShift, ...shifts];
-    setShifts(updatedShifts);
-    setActiveShiftId(newShift.id);
-    await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
+ const startNewShift = async () => {
+  const now = new Date();
+  const timeString = now.toLocaleString('fi-FI', { 
+    weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
+  });
+  
+  // Luodaan uusi tyhjä kierros
+  const newShift: PatrolShift = { 
+    id: Date.now().toString(), 
+    startTime: timeString, 
+    logs: [],
+    status: 'AKTIIVINEN' 
   };
+  
+  const updatedShifts = [newShift, ...shifts];
+  setShifts(updatedShifts);
+  setActiveShiftId(newShift.id);
+  await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
+};
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (!activeShiftId) {
@@ -121,24 +130,57 @@ export default function SecurityPatrolScreen() {
   };
 
   const saveFinalReport = async () => {
-    try {
-      const location = await Location.getCurrentPositionAsync({});
-      const newEntry: PatrolLog = {
-        id: Date.now().toString(),
-        point: currentScanData,
-        time: new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }),
-        coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`,
-        report: { ...report }
+  try {
+    const location = await Location.getCurrentPositionAsync({});
+    
+    // 1. MÄÄRITELLÄÄN newEntry ENSIN (Tämä korjaa virheen)
+    const newEntry: PatrolLog = {
+      id: Date.now().toString(),
+      point: currentScanData,
+      time: new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }),
+      coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`,
+      report: { ...report }
+    };
+
+    // 2. TARKISTETAAN TILANNE: Onko nykyinen kierros lukittu?
+    const currentShift = shifts.find(s => s.id === activeShiftId);
+    const isLocked = currentShift?.status === 'LUKITTU';
+
+    if (isLocked || !activeShiftId) {
+      // LUODAAN UUSI KIERROS (Koska vanha on lähetetty/lukittu tai sitä ei ole)
+      const now = new Date();
+      const timeString = now.toLocaleString('fi-FI', { 
+        weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
+      });
+      
+      const newShift: PatrolShift = { 
+        id: Date.now().toString(), 
+        startTime: timeString, 
+        logs: [newEntry], // Lisätään uusi skannaus heti tähän
+        status: 'AKTIIVINEN'
       };
-      const updatedShifts = shifts.map(s => s.id === activeShiftId ? { ...s, logs: [newEntry, ...s.logs] } : s);
+      
+      const finalShifts = [newShift, ...shifts];
+      setShifts(finalShifts);
+      setActiveShiftId(newShift.id);
+      await AsyncStorage.setItem('all_shifts', JSON.stringify(finalShifts));
+      
+    } else {
+      // PÄIVITETÄÄN NYKYISTÄ AKTIIVISTA KIERROSTA
+      const updatedShifts = shifts.map(s => 
+        s.id === activeShiftId ? { ...s, logs: [newEntry, ...s.logs] } : s
+      );
       setShifts(updatedShifts);
       await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
-      setModalVisible(false);
-      setScanned(false);
-    } catch (err) {
-      setScanned(false);
     }
-  };
+
+    setModalVisible(false);
+    setScanned(false);
+  } catch (err) {
+    console.error("Tallennus epäonnistui:", err);
+    setScanned(false);
+  }
+};
 
   const deleteLogItem = (logId: string) => {
     const updated = shifts.map(s => s.id === activeShiftId ? { ...s, logs: s.logs.filter(l => l.id !== logId) } : s);

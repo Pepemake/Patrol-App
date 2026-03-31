@@ -12,22 +12,32 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+        // Käytetään teeman värejä, mutta varmistetaan selkeys
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarInactiveTintColor: 'gray',
         headerShown: false,
         tabBarButton: HapticTab,
+        // Lisää pientä tyyliä alareunaan
+        tabBarStyle: {
+          borderTopWidth: 1,
+          borderTopColor: '#eee',
+          height: 60,
+          paddingBottom: 8,
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Aluevalvonta',
-          tabBarIcon: ({ color }) => <Ionicons size={28} name="shield-checkmark" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="shield-checkmark" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Asetukset',
-          tabBarIcon: ({ color }) => <Ionicons size={28} name="settings" color={color} />,
+          title: 'Raportointi',
+          // Vaihdettu ikoni clipboardiksi, sopii paremmin raportointiin
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="clipboard" color={color} />,
         }}
       />
     </Tabs>
