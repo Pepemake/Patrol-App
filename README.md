@@ -19,10 +19,10 @@ Valmiina:
 - Yksittäisen raportin avaaminen listasta niin, että kaikki tiedot (myös ne GPS-koordinaatit ja lisätiedot) näkyvät isona.
 - Loppu raportti PDF Muotoon jossa käyttäjän nimi + käydyt paikat
 - Sähköposti lähettäjä halutulle tarkastajalle
+- Vartijan nimi kierrokseen
 
 Työn alla: 
 - Parempi UI
-- Vartijan nimi kierrokseen
 - Lukitus systeemi
   
 
