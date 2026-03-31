@@ -83,6 +83,7 @@ export default function ReportingScreen() {
     <body>
       <h1>VARTIOINTIRAPORTTI</h1>
       <div class="header-info">
+        <p><b>Vartija:</b> ${activeShift.guardName || 'Ei ilmoitettu'}</p>
         <p><b>Kierros aloitettu:</b> ${activeShift.startTime}</p>
         <p><b>Raportti generoitu:</b> ${new Date().toLocaleString('fi-FI')}</p>
       </div>

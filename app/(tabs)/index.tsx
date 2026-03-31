@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, FlatList, Modal, PanResponder, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-// --- TYYPIT ---
+// --- Luokat ---
 interface PatrolLog {
   id: string;
   point: string;
@@ -22,8 +22,10 @@ interface PatrolLog {
 interface PatrolShift {
   id: string;
   startTime: string;
+  endTime?: string;
   logs: PatrolLog[];
   status?: 'AKTIIVINEN' | 'LUKITTU';
+  guardName?: string; 
 }
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -33,9 +35,10 @@ export default function SecurityPatrolScreen() {
   const [scanned, setScanned] = useState(false);
   const [shifts, setShifts] = useState<PatrolShift[]>([]);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
+  const [tempGuardName, setTempGuardName] = useState('');
   
   // Modalit
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modelVisible, setModalVisible] = useState(false);
   const [isShiftPickerOpen, setShiftPickerOpen] = useState(false);
   
   // Raportointitiedot
@@ -97,6 +100,15 @@ export default function SecurityPatrolScreen() {
   }, []);
 
  const startNewShift = async () => {
+  if (!tempGuardName.trim()) {
+    Alert.alert("Huomio!", "Kirjoita vartijan nimi ennen uuden kierroksen aloittamista")
+    return
+  }
+  if (tempGuardName.trim().length <2){
+    Alert.alert("Nimi puuttuu", "Kirjoita vartijan nimi (vähintään 2 merkkiä")
+    return
+  }
+  
   const now = new Date();
   const timeString = now.toLocaleString('fi-FI', { 
     weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
@@ -107,13 +119,16 @@ export default function SecurityPatrolScreen() {
     id: Date.now().toString(), 
     startTime: timeString, 
     logs: [],
-    status: 'AKTIIVINEN' 
+    status: 'AKTIIVINEN',
+    guardName: tempGuardName 
   };
   
   const updatedShifts = [newShift, ...shifts];
   setShifts(updatedShifts);
   setActiveShiftId(newShift.id);
   await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
+  setTempGuardName('');
+  Alert.alert("Kierros aloitettu", `Vartija: ${newShift.guardName}`);
 };
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
@@ -129,25 +144,34 @@ export default function SecurityPatrolScreen() {
     setModalVisible(true);
   };
 
-  const saveFinalReport = async () => {
+const saveFinalReport = async () => {
+  setModalVisible(false);
+  setScanned(false);
+  
   try {
-    const location = await Location.getCurrentPositionAsync({});
+    // Haetaan sijainti 
+    let location = await Location.getLastKnownPositionAsync({});
+    if (!location) {
+      location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+    }
     
-    // 1. MÄÄRITELLÄÄN newEntry ENSIN (Tämä korjaa virheen)
+    // Muotoillaan koordinaatit 
+    const coordsString = location 
+      ? `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`
+      : "Sijainti ei saatavilla";
+
     const newEntry: PatrolLog = {
       id: Date.now().toString(),
       point: currentScanData,
       time: new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }),
-      coords: `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`,
+      coords: coordsString,
       report: { ...report }
     };
 
-    // 2. TARKISTETAAN TILANNE: Onko nykyinen kierros lukittu?
     const currentShift = shifts.find(s => s.id === activeShiftId);
     const isLocked = currentShift?.status === 'LUKITTU';
 
     if (isLocked || !activeShiftId) {
-      // LUODAAN UUSI KIERROS (Koska vanha on lähetetty/lukittu tai sitä ei ole)
       const now = new Date();
       const timeString = now.toLocaleString('fi-FI', { 
         weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
@@ -156,8 +180,9 @@ export default function SecurityPatrolScreen() {
       const newShift: PatrolShift = { 
         id: Date.now().toString(), 
         startTime: timeString, 
-        logs: [newEntry], // Lisätään uusi skannaus heti tähän
-        status: 'AKTIIVINEN'
+        logs: [newEntry],
+        status: 'AKTIIVINEN',
+        guardName: currentShift?.guardName || tempGuardName 
       };
       
       const finalShifts = [newShift, ...shifts];
@@ -166,19 +191,14 @@ export default function SecurityPatrolScreen() {
       await AsyncStorage.setItem('all_shifts', JSON.stringify(finalShifts));
       
     } else {
-      // PÄIVITETÄÄN NYKYISTÄ AKTIIVISTA KIERROSTA
       const updatedShifts = shifts.map(s => 
         s.id === activeShiftId ? { ...s, logs: [newEntry, ...s.logs] } : s
       );
       setShifts(updatedShifts);
       await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
     }
-
-    setModalVisible(false);
-    setScanned(false);
   } catch (err) {
-    console.error("Tallennus epäonnistui:", err);
-    setScanned(false);
+    console.error("Optimointivirhe tallennuksessa:", err);
   }
 };
 
@@ -226,12 +246,27 @@ export default function SecurityPatrolScreen() {
           <View style={styles.handleBar} />
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
-          <TouchableOpacity style={styles.newShiftButton} onPress={startNewShift}>
-            <Text style={styles.newShiftButtonText}>+ Uusi kierros</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.controlPanel}>
+  <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
+  
+  <View style={styles.inputRow}>
+    <TextInput
+      style={styles.nameInputInline}
+      placeholder="Kirjoita vartijan nimi..."
+      placeholderTextColor="#999"
+      value={tempGuardName}
+      onChangeText={setTempGuardName}
+    />
+    <TouchableOpacity style={styles.newShiftButton} onPress={startNewShift}>
+      <Text style={styles.newShiftButtonText}>+ ALOITA</Text>
+    </TouchableOpacity>
+  </View>
+  
+  {/* Ohjeteksti, joka näkyy vain jos nimeä ei ole vielä kirjoitettu */}
+  {!tempGuardName && (
+    <Text style={styles.hintText}>Syötä nimi aloittaaksesi uuden kierroksen</Text>
+  )}
+</View>
 
         <TouchableOpacity style={styles.activeShiftBox} onPress={() => setShiftPickerOpen(true)}>
           <View>
@@ -289,7 +324,7 @@ export default function SecurityPatrolScreen() {
       </Modal>
 
       <Modal 
-  visible={modalVisible} 
+  visible={modelVisible} 
   animationType="slide"
   onRequestClose={() => { setModalVisible(false); setScanned(false); setStep(1); }}
 >
@@ -308,7 +343,7 @@ export default function SecurityPatrolScreen() {
         </TouchableOpacity>
       ))}
 
-      {/* VAIHE 2: Kohde (Suodattaa vaihtoehdot valitun kategorian mukaan) */}
+      {/* VAIHE 2: Kohde  */}
       {step === 2 && (
         <View>
           <Text style={styles.stepTitle}>2. Kohde ({report.kategoria})</Text>
@@ -320,7 +355,7 @@ export default function SecurityPatrolScreen() {
         </View>
       )}
 
-      {/* VAIHE 3: Toteama (Avoin, Rikki, jne.) */}
+      {/* VAIHE 3: Toteama  */}
       {step === 3 && (
         <View>
           <Text style={styles.stepTitle}>3. Toteama</Text>
@@ -328,7 +363,7 @@ export default function SecurityPatrolScreen() {
         </View>
       )}
 
-      {/* VAIHE 4: Toimenpide (Tarkastettu, Suljettu, jne.) */}
+      {/* VAIHE 4: Toimenpide  */}
       {step === 4 && (
         <View>
           <Text style={styles.stepTitle}>4. Toimenpide</Text>
@@ -336,7 +371,7 @@ export default function SecurityPatrolScreen() {
         </View>
       )}
 
-      {/* VAIHE 5: Lopputulos (OK, Ei ok) */}
+      {/* VAIHE 5: Lopputulos  */}
       {step === 5 && (
         <View>
           <Text style={styles.stepTitle}>5. Lopputulos</Text>
@@ -417,4 +452,8 @@ const styles = StyleSheet.create({
   modalCancel: { marginTop: 20, alignSelf: 'center' },
   devtyhjenna: { marginTop: 20, marginHorizontal: 15,padding: 15, borderRadius: 10, backgroundColor: '#fff0f0', borderWidth: 1, borderColor: '#ffcccc',alignItems: 'center' },
   devButtonText: { color: '#cc0000', fontWeight: 'bold', fontSize: 12 },
-});
+  controlPanel: {paddingHorizontal: 15,paddingVertical: 10,backgroundColor: '#fff',},
+  inputRow: {flexDirection: 'row',alignItems: 'center',marginTop: 10,gap: 10, },
+  nameInputInline: {flex: 1,backgroundColor: '#f2f2f2',borderRadius: 8,paddingHorizontal: 12,paddingVertical: 10,borderWidth: 1,borderColor: '#ddd',fontSize: 16,color: '#333',},
+  hintText: {fontSize: 11,color: '#007AFF',marginTop: 5,fontStyle: 'italic',},
+  });
