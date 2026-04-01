@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, FlatList, Modal, PanResponder, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // --- Luokat ---
-interface PatrolLog {
+interface Kierrosloki {
   id: string;
   point: string;
   time: string;
@@ -19,13 +19,13 @@ interface PatrolLog {
     lisatiedot: string;
   };
 }
-interface PatrolShift {
+interface Vartiokierros {
   id: string;
   startTime: string;
   endTime?: string;
-  logs: PatrolLog[];
+  logs: Kierrosloki[];
   status?: 'AKTIIVINEN' | 'LUKITTU';
-  guardName?: string; 
+  vartijanNimi?: string; 
 }
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -33,14 +33,12 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 export default function SecurityPatrolScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [shifts, setShifts] = useState<PatrolShift[]>([]);
+  const [shifts, setShifts] = useState<Vartiokierros[]>([]);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [tempGuardName, setTempGuardName] = useState('');
-  
   // Modalit
   const [modelVisible, setModalVisible] = useState(false);
   const [isShiftPickerOpen, setShiftPickerOpen] = useState(false);
-  
   // Raportointitiedot
   const [currentScanData, setCurrentScanData] = useState('');
   const [step, setStep] = useState(1);
@@ -74,17 +72,39 @@ export default function SecurityPatrolScreen() {
   };
 
   const activeShift = shifts.find(s => s.id === activeShiftId);
-  const inspectionData = {
-    categories: [
-      { id: "palo", title: "Paloturvallisuus", options: ["Palo-ovi", "Hätäuloskäynti", "Alkusammutuskalusto"] },
-      { id: "lukitukset", title: "Lukitukset", options: ["Ulko-ovi", "Sisäovi", "Porrasovi", "Ikkuna"] },
-      { id: "kiinteisto", title: "Kiinteistö", options: ["Lämpö", "Vesi", "Ilmastointi", "Sähkö"] },
-      { id: "henkilot", title: "Henkilöt", options: ["Luvallinen", "Luvaton", "Rikos", "Viranomainen"] }
-    ],
-    states: ["Avoin", "Rikki", "Puutteita", "Päällä", "Pois päältä"],
-    actions: ["Tarkastettu", "Suljettu", "Poistettu", "Sammutettu", "Soitettu 112"],
-    results: ["OK", "Ei ok"]
-  };
+const inspectionData = {
+  categories: [
+    { 
+      id: "palo", 
+      title: "Paloturvallisuus", 
+      options: ["Palo-ovi", "Hätäuloskäynti", "Alkusammutuskalusto"],
+      states: ["Esteetön", "Lukittu", "Puutteita", "Rikki", "Käytetty"],
+      actions: ["Tarkastettu", "Raivattu", "Ilmoitettu huollolle", "Sammutettu"]
+    },
+    { 
+      id: "lukitukset", 
+      title: "Lukitukset", 
+      options: ["Ulko-ovi", "Sisäovi", "Porrasovi", "Ikkuna"],
+      states: ["Lukittu", "Avoin", "Rikki", "Ei lukittu", "Avain katkennut"],
+      actions: ["Tarkastettu", "Lukittu", "Sulkemisyritys", "Kutsuttu lukkoseppä"]
+    },
+    { 
+      id: "kiinteisto", 
+      title: "Kiinteistö", 
+      options: ["Lämpö", "Vesi", "Ilmastointi", "Sähkö"],
+      states: ["Normaali", "Vuoto", "Hälytys", "Päällä", "Pois päältä"],
+      actions: ["Tarkastettu", "Suljettu pääsulku", "Kuitattu hälytys", "Ilmoitettu päivystykseen"]
+    },
+    { 
+      id: "henkilot", 
+      title: "Henkilöt", 
+      options: ["Luvallinen", "Luvaton", "Rikos", "Viranomainen"],
+      states: ["Rauhallinen", "Aggressiivinen", "Päihtynyt", "Poistettu kohteesta"],
+      actions: ["Puhutettu", "Tarkastettu luvat", "Poistettu", "Otettu kiinni", "Soitettu 112"]
+    }
+  ],
+  results: ["OK", "Ei ok"]
+};
 
   useEffect(() => {
     (async () => {
@@ -115,20 +135,20 @@ export default function SecurityPatrolScreen() {
   });
   
   // Luodaan uusi tyhjä kierros
-  const newShift: PatrolShift = { 
+  const uusiKierros: Vartiokierros = { 
     id: Date.now().toString(), 
     startTime: timeString, 
     logs: [],
     status: 'AKTIIVINEN',
-    guardName: tempGuardName 
+    vartijanNimi: tempGuardName 
   };
   
-  const updatedShifts = [newShift, ...shifts];
-  setShifts(updatedShifts);
-  setActiveShiftId(newShift.id);
-  await AsyncStorage.setItem('all_shifts', JSON.stringify(updatedShifts));
+  const paivitaKierros = [uusiKierros, ...shifts];
+  setShifts(paivitaKierros);
+  setActiveShiftId(uusiKierros.id);
+  await AsyncStorage.setItem('all_shifts', JSON.stringify(paivitaKierros));
   setTempGuardName('');
-  Alert.alert("Kierros aloitettu", `Vartija: ${newShift.guardName}`);
+  Alert.alert("Kierros aloitettu", `Vartija: ${uusiKierros.vartijanNimi}`);
 };
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
@@ -154,36 +174,31 @@ const saveFinalReport = async () => {
     if (!location) {
       location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
     }
-    
-    // Muotoillaan koordinaatit 
     const coordsString = location 
       ? `${location.coords.latitude.toFixed(5)}, ${location.coords.longitude.toFixed(5)}`
       : "Sijainti ei saatavilla";
 
-    const newEntry: PatrolLog = {
+    const newEntry: Kierrosloki = {
       id: Date.now().toString(),
       point: currentScanData,
       time: new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }),
       coords: coordsString,
       report: { ...report }
     };
-
     const currentShift = shifts.find(s => s.id === activeShiftId);
     const isLocked = currentShift?.status === 'LUKITTU';
-
     if (isLocked || !activeShiftId) {
       const now = new Date();
       const timeString = now.toLocaleString('fi-FI', { 
         weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' 
       });
-      
-      const newShift: PatrolShift = { 
+    const newShift: Vartiokierros = { 
         id: Date.now().toString(), 
         startTime: timeString, 
         logs: [newEntry],
         status: 'AKTIIVINEN',
-        guardName: currentShift?.guardName || tempGuardName 
-      };
+        vartijanNimi: currentShift?.vartijanNimi || tempGuardName 
+    };
       
       const finalShifts = [newShift, ...shifts];
       setShifts(finalShifts);
@@ -248,7 +263,6 @@ const saveFinalReport = async () => {
 
         <View style={styles.controlPanel}>
   <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
-  
   <View style={styles.inputRow}>
     <TextInput
       style={styles.nameInputInline}
@@ -261,17 +275,15 @@ const saveFinalReport = async () => {
       <Text style={styles.newShiftButtonText}>+ ALOITA</Text>
     </TouchableOpacity>
   </View>
-  
   {/* Ohjeteksti, joka näkyy vain jos nimeä ei ole vielä kirjoitettu */}
   {!tempGuardName && (
     <Text style={styles.hintText}>Syötä nimi aloittaaksesi uuden kierroksen</Text>
   )}
 </View>
-
         <TouchableOpacity style={styles.activeShiftBox} onPress={() => setShiftPickerOpen(true)}>
           <View>
             <Text style={styles.label}>VALITTU KIERROS:</Text>
-            <Text style={styles.activeShiftText}>{activeShift ? ` ${activeShift.startTime}` : "Valitse kierros"}</Text>
+            <Text style={styles.activeShiftText}> {activeShift ? `${activeShift.startTime} Vartija: ${activeShift.vartijanNimi || ''}` : "Valitse kierros"}</Text>
           </View>
           <Text style={{color: '#007AFF', fontWeight: 'bold'}}>MUUTA ▲</Text>
         </TouchableOpacity>
@@ -305,119 +317,129 @@ const saveFinalReport = async () => {
   />
 </View>
       <Modal visible={isShiftPickerOpen} animationType="slide">
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Valitse kierros</Text>
-          <FlatList
-            data={shifts}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={styles.dropdownItem} 
-                onPress={() => { setActiveShiftId(item.id); setShiftPickerOpen(false); }}
-              >
-                <Text>{item.startTime}</Text>
-              </TouchableOpacity>
-            )}
-          />
-          <TouchableOpacity onPress={() => setShiftPickerOpen(false)} style={styles.closeButton}><Text style={{color:'white'}}>Sulje</Text></TouchableOpacity>
-        </View>
-      </Modal>
-
-      <Modal 
+  <View style={styles.modalContainer}>
+    <Text style={styles.modalTitle}>Valitse kierros</Text>
+    <FlatList
+      data={shifts}
+      keyExtractor={item => item.id}
+      renderItem={({ item }) => (
+        <TouchableOpacity 
+          style={styles.dropdownItem} 
+          onPress={() => { setActiveShiftId(item.id); setShiftPickerOpen(false); }}
+        >
+          <View>
+            <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{item.startTime}</Text>
+            <Text style={{ color: '#666', fontSize: 13 }}>Vartija: {item.vartijanNimi || 'Ei nimeä'}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+    />
+    <TouchableOpacity 
+      onPress={() => setShiftPickerOpen(false)} 
+      style={styles.closeButton}
+    >
+      <Text style={{color:'white', fontWeight: 'bold'}}>Sulje</Text>
+    </TouchableOpacity>
+  </View>
+</Modal>
+<Modal 
   visible={modelVisible} 
   animationType="slide"
   onRequestClose={() => { setModalVisible(false); setScanned(false); setStep(1); }}
 >
   <View style={styles.modalContainer}>
-    <ScrollView>
-      <Text style={styles.modalTitle}>Skanattu: {currentScanData}</Text>
-      
-      {/* VAIHE 1: Kategoria */}
-      {step === 1 && inspectionData.categories.map(cat => (
-        <TouchableOpacity 
-          key={cat.id} 
-          style={styles.optionButton} 
-          onPress={() => { setReport({...report, kategoria: cat.title}); setStep(2); }}
-        >
-          <Text style={styles.optionText}>{cat.title}</Text>
+  <ScrollView>
+    <Text style={styles.modalTitle}>Skanattu: {currentScanData}</Text>
+    
+    {/* VAIHE 1: Kategoria */}
+    {step === 1 && inspectionData.categories.map(cat => (
+      <TouchableOpacity 
+        key={cat.id} 
+        style={styles.optionButton} 
+        onPress={() => { setReport({...report, kategoria: cat.title}); setStep(2); }}
+      >
+        <Text style={styles.optionText}>{cat.title}</Text>
+      </TouchableOpacity>
+    ))}
+    {/* VAIHE 2: Kohde */}
+    {step === 2 && (
+      <View>
+        <Text style={styles.stepTitle}>2. Kohde ({report.kategoria})</Text>
+        {renderOptions(
+          inspectionData.categories.find(c => c.title === report.kategoria)?.options || [], 
+          'kohde', 
+          3
+        )}
+      </View>
+    )}
+    {/* VAIHE 3: Toteama */}
+    {step === 3 && (
+      <View>
+        <Text style={styles.stepTitle}>3. Toteama</Text>
+        {renderOptions(
+          inspectionData.categories.find(c => c.title === report.kategoria)?.states || [], 
+          'toteama', 
+          4
+        )}
+      </View>
+    )}
+    {/* VAIHE 4: Toimenpide */}
+    {step === 4 && (
+      <View>
+        <Text style={styles.stepTitle}>4. Toimenpide</Text>
+        {renderOptions(
+          inspectionData.categories.find(c => c.title === report.kategoria)?.actions || [], 
+          'toimenpide', 
+          5
+        )}
+      </View>
+    )}
+    {/* VAIHE 5: Lopputulos */}
+    {step === 5 && (
+      <View>
+        <Text style={styles.stepTitle}>5. Lopputulos</Text>
+        {renderOptions(inspectionData.results, 'lopputulos', 6)}
+      </View>
+    )}
+    {/* VAIHE 6: Lisätiedot ja tallennus */}
+    {step === 6 && (
+      <View>
+        <Text style={styles.stepTitle}>6. Lisätiedot</Text>
+        <TextInput 
+          style={styles.modalInput} 
+          multiline 
+          placeholder="Vapaa teksti..." 
+          onChangeText={t => setReport({...report, lisatiedot: t})} 
+        />
+        <TouchableOpacity style={styles.saveButton} onPress={saveFinalReport}>
+          <Text style={{color:'white', textAlign:'center', fontWeight:'bold'}}>TALLENNA RAPORTTI</Text>
         </TouchableOpacity>
-      ))}
-
-      {/* VAIHE 2: Kohde  */}
-      {step === 2 && (
-        <View>
-          <Text style={styles.stepTitle}>2. Kohde ({report.kategoria})</Text>
-          {renderOptions(
-            inspectionData.categories.find(c => c.title === report.kategoria)?.options || [], 
-            'kohde', 
-            3
-          )}
-        </View>
-      )}
-
-      {/* VAIHE 3: Toteama  */}
-      {step === 3 && (
-        <View>
-          <Text style={styles.stepTitle}>3. Toteama</Text>
-          {renderOptions(inspectionData.states, 'toteama', 4)}
-        </View>
-      )}
-
-      {/* VAIHE 4: Toimenpide  */}
-      {step === 4 && (
-        <View>
-          <Text style={styles.stepTitle}>4. Toimenpide</Text>
-          {renderOptions(inspectionData.actions, 'toimenpide', 5)}
-        </View>
-      )}
-
-      {/* VAIHE 5: Lopputulos  */}
-      {step === 5 && (
-        <View>
-          <Text style={styles.stepTitle}>5. Lopputulos</Text>
-          {renderOptions(inspectionData.results, 'lopputulos', 6)}
-        </View>
-      )}
-
-      {/* VAIHE 6: Lisätiedot ja tallennus */}
-      {step === 6 && (
-        <View>
-          <Text style={styles.stepTitle}>6. Lisätiedot</Text>
-          <TextInput 
-            style={styles.modalInput} 
-            multiline 
-            placeholder="Vapaa teksti..." 
-            onChangeText={t => setReport({...report, lisatiedot: t})} 
-          />
-          <TouchableOpacity style={styles.saveButton} onPress={saveFinalReport}>
-            <Text style={{color:'white', textAlign:'center', fontWeight:'bold'}}>TALLENNA RAPORTTI</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
-    {/* PERUUTUS / TAKAISIN -NAPPI */}
-    <TouchableOpacity 
-      onPress={() => {
-        if (step > 1) {
-          setStep(step - 1);
-        } else {
-          setModalVisible(false);
-          setScanned(false);
-          setStep(1);
-        }
-      }} 
-      style={styles.modalCancel}
+      </View>
+    )}
+  </ScrollView>
+  {/* PERUUTUS Nappi*/}
+  <TouchableOpacity 
+    onPress={() => {
+      if (step > 1) {
+        setStep(step - 1);
+      } else {
+        setModalVisible(false);
+        setScanned(false);
+        setStep(1);
+      }
+    }} 
+    style={styles.modalCancel}
     >
-      <Text style={{color: 'red', fontWeight: 'bold'}}>
-        {step > 1 ? "← Takaisin" : "Peruuta"}
-      </Text>
-    </TouchableOpacity>
-  </View>
+    <Text style={{color: 'red', fontWeight: 'bold'}}>
+      {step > 1 ? "← Takaisin" : "Peruuta"}
+    </Text>
+  </TouchableOpacity>
+</View>
 </Modal>
-    </View>
+</View>
   );
 }
-
+/* Tänne kaikki Reactin "UI" */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a1a' },
   header: { paddingTop: 50, paddingBottom: 15, alignItems: 'center' },
