@@ -24,6 +24,8 @@ Valmiina:
 Työn alla: 
 - Parempi UI
 - Lukitus systeemi
+- Koodin suomennus | Funktioiden kommentointi
+- 1.0 Release
   
 
 Bugit:
