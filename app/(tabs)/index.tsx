@@ -216,13 +216,31 @@ const saveFinalReport = async () => {
     console.error("Optimointivirhe tallennuksessa:", err);
   }
 };
-
-  const deleteLogItem = (logId: string) => {
-    const updated = shifts.map(s => s.id === activeShiftId ? { ...s, logs: s.logs.filter(l => l.id !== logId) } : s);
-    setShifts(updated);
-    AsyncStorage.setItem('all_shifts', JSON.stringify(updated));
-  };
-
+const deleteLogItem = (logId: string) => {
+  Alert.alert(
+    "Vahvista poisto",
+    "Haluatko varmasti poistaa tämän merkinnän?",
+    [
+      {
+        text: "Peruuta",
+        style: "cancel" 
+      },
+      { 
+        text: "Poista", 
+        style: "destructive",
+        onPress: () => {
+          const updated = shifts.map(s => 
+            s.id === activeShiftId 
+              ? { ...s, logs: s.logs.filter(l => l.id !== logId) } 
+              : s
+          );
+          setShifts(updated);
+          AsyncStorage.setItem('all_shifts', JSON.stringify(updated));
+        }
+      }
+    ]
+  );
+};
   const renderOptions = (items: string[], field: string, nextStep: number) => (
     <View style={styles.optionGrid}>
       {items.map(item => (
@@ -260,7 +278,6 @@ const saveFinalReport = async () => {
         <View style={styles.dragHandle} {...panResponder.panHandlers}>
           <View style={styles.handleBar} />
         </View>
-
         <View style={styles.controlPanel}>
   <Text style={styles.sectionTitle}>Kierroksen hallinta</Text>
   <View style={styles.inputRow}>
