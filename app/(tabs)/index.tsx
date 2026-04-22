@@ -77,34 +77,49 @@ const inspectionData = {
     { 
       id: "palo", 
       title: "Paloturvallisuus", 
-      options: ["Palo-ovi", "Hätäuloskäynti", "Alkusammutuskalusto"],
-      states: ["Esteetön", "Lukittu", "Puutteita", "Rikki", "Käytetty"],
-      actions: ["Tarkastettu", "Raivattu", "Ilmoitettu huollolle", "Sammutettu"]
+      options: ["Palo-osastointi", "Hätäuloskäynti", "Palokuorma", "Alkusammutuskalusto", "Lämmön lähde"],
+      states: ["Avoin", "Tukossa", "Puutteita", "Rikki"],
+      actions: ["Suljettu", "Raivattu auki", "Sammutettu", "Tilattava huolto"]
     },
     { 
       id: "lukitukset", 
       title: "Lukitukset", 
-      options: ["Ulko-ovi", "Sisäovi", "Porrasovi", "Ikkuna"],
-      states: ["Lukittu", "Avoin", "Rikki", "Ei lukittu", "Avain katkennut"],
-      actions: ["Tarkastettu", "Lukittu", "Sulkemisyritys", "Kutsuttu lukkoseppä"]
+      options: ["Ulko-ovi", "Sisäovi", "Ajoneuvo-ovi", "Ikkuna", "Luukku"],
+      states: ["Avoin", "Lukittu", "Auki kiilattu", "Rikki"],
+      actions: ["Lukittu", "Suljettu", "Avattu", "Teljetty", "Huolto tilattava"]
     },
     { 
       id: "kiinteisto", 
       title: "Kiinteistö", 
-      options: ["Lämpö", "Vesi", "Ilmastointi", "Sähkö"],
-      states: ["Normaali", "Vuoto", "Hälytys", "Päällä", "Pois päältä"],
-      actions: ["Tarkastettu", "Suljettu pääsulku", "Kuitattu hälytys", "Ilmoitettu päivystykseen"]
+      options: ["Lämpö", "Vesi", "Ilmastointi", "Sähkö", "Pakasteet", "Seinä", "Lattia", "Katto"],
+      states: ["Vuoto", "Hälytys", "Päällä", "Pois päältä", "Rikki"],
+      actions: ["Tarkastettu", "Suljettu", "Kuitattu", "Huolto tilattava", "Huolto tilattu"]
     },
     { 
       id: "henkilot", 
       title: "Henkilöt", 
-      options: ["Luvallinen", "Luvaton", "Rikos", "Viranomainen"],
-      states: ["Rauhallinen", "Aggressiivinen", "Päihtynyt", "Poistettu kohteesta"],
-      actions: ["Puhutettu", "Tarkastettu luvat", "Poistettu", "Otettu kiinni", "Soitettu 112"]
+      options: ["Luvallinen", "Luvaton", "Rikos"],
+      states: ["Henkilökuntaa", "Alihankkija", "Ulkopuolinen", "Luvaton ei rikos", "Rikollinen", "Viranomainen"],
+      actions: ["Lupa ok jää paikalle", "Lupa ok poistui", "Poistettu", "Otettu kiinni", "Luovutettu poliisille"]
+    },
+    { 
+      id: "voimankaytto", 
+      title: "Voimankäyttö", 
+      options: ["Luvaton oleskelu", "Rikos", "Hätävarjelu"],
+      states: ["Pääsyn esto", "Poistaminen", "Kiinniotto", "Tarkastaminen", "Hyökkäyksen torjunta"],
+      actions: ["Fyysiset voimakeinot", "Käsiraudat", "Patukka/TKP", "Kaasusumutin", "Ampuma-ase"]
+    },
+    { 
+      id: "rikos", 
+      title: "Rikos", 
+      options: ["Murto", "Anastus", "Vahingonteko", "Väkivalta"],
+      states: ["Asianomistajarikos", "Yleisen syyttäjän alainen rikos"],
+      actions: ["Poisto", "Pääsynesto", "Kiinniotto"]
     }
   ],
   results: ["OK", "Ei ok"]
 };
+
 
   useEffect(() => {
     (async () => {
